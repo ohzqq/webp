@@ -16,7 +16,7 @@ func EncodeAll(w io.Writer, images []image.Image, o ...Options) error {
 	}
 	anim := newAnim(len(images), opt)
 	for i, f := range images {
-		d, err := EncodeImg(f, opt)
+		d, err := encodeImg(f, opt)
 		if err != nil {
 			return err
 		}

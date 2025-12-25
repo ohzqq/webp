@@ -143,7 +143,7 @@ func Encode(w io.Writer, m image.Image, o ...Options) error {
 	return nil
 }
 
-func EncodeImg(m image.Image, o ...Options) ([]byte, error) {
+func encodeImg(m image.Image, o ...Options) ([]byte, error) {
 	lossless := false
 	quality := DefaultQuality
 	method := DefaultMethod
