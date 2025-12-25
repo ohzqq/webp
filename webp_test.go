@@ -2,11 +2,14 @@ package webp
 
 import (
 	"bytes"
+	"embed"
 	_ "embed"
+	"fmt"
 	"image"
 	"image/jpeg"
 	"image/png"
 	"io"
+	"io/fs"
 	"os"
 	"sync"
 	"testing"
@@ -20,6 +23,9 @@ var testPng []byte
 
 //go:embed testdata/anim.webp
 var testWebpAnim []byte
+
+//go:embed testdata/frame*
+var testFrames embed.FS
 
 func TestDecode(t *testing.T) {
 	img, err := Decode(bytes.NewReader(testWebp))
@@ -148,6 +154,65 @@ func TestImageDecodeConfig(t *testing.T) {
 
 	if cfg.Height != 512 {
 		t.Errorf("height: got %d, want %d", cfg.Height, 512)
+	}
+}
+
+func TestImageEncodeAnimFromFrames(t *testing.T) {
+	matches, err := fs.Glob(testFrames, "testdata/frame*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	frames := make([]image.Image, len(matches))
+	for i, png := range matches {
+		p, err := os.Open(png)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer p.Close()
+		img, _, err := image.Decode(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		frames[i] = img
+	}
+
+	w, err := writeCloser(`testdata/encoded-anim.webp`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = EncodeAll(w, frames)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestImageEncodeAnim(t *testing.T) {
+	animWebp, err := DecodeAll(bytes.NewReader(testWebpAnim))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i, f := range animWebp.Image {
+		out := fmt.Sprintf("testdata/frame%02d.webp", i)
+		w, err := writeCloser(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = Encode(w, f)
+		if err != nil {
+			t.Error(err)
+		}
+	}
+
+	w, err := writeCloser(`testdata/encoded-anim.webp`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = encodeAll(w, animWebp)
+	if err != nil {
+		t.Error(err)
 	}
 }
 

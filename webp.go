@@ -29,6 +29,10 @@ type WEBP struct {
 	Image []image.Image
 	// Delay times, one per frame, in milliseconds.
 	Delay []int
+	// Disposals methods for frames after display; 0=keep, 1=clear to background.
+	Disposals []int
+	// LoopCount the number of times the animation loops; 0 for infinite.
+	LoopCount int
 }
 
 // DefaultQuality is the default quality encoding parameter.
@@ -47,6 +51,9 @@ type Options struct {
 	Method int
 	// Exact preserve the exact RGB values in transparent area.
 	Exact bool
+	// UseExtendedFormat allows for metadata support. Only used for encoding
+	// animated images.
+	UseExtendedFormat bool
 }
 
 // Decode reads a WEBP image from r and returns it as an image.Image.
@@ -121,6 +128,40 @@ func Encode(w io.Writer, m image.Image, o ...Options) error {
 	}
 
 	return nil
+}
+
+func EncodeImg(m image.Image, o ...Options) ([]byte, error) {
+	lossless := false
+	quality := DefaultQuality
+	method := DefaultMethod
+	exact := false
+
+	if o != nil {
+		opt := o[0]
+		lossless = opt.Lossless
+		quality = opt.Quality
+		method = opt.Method
+		exact = opt.Exact
+
+		if quality <= 0 {
+			quality = DefaultQuality
+		} else if quality > 100 {
+			quality = 100
+		}
+
+		if method < 0 {
+			method = DefaultMethod
+		} else if method > 6 {
+			method = 6
+		}
+	}
+
+	d, err := encodeBytes(m, quality, method, lossless, exact)
+	if err != nil {
+		return nil, err
+	}
+
+	return d, nil
 }
 
 // Dynamic returns error (if there was any) during opening dynamic/shared library.

@@ -134,6 +134,7 @@ func decode(r io.Reader, configOnly, decodeAll bool) (*WEBP, image.Config, error
 	}
 
 	delay := make([]int, 0)
+	disposals := make([]int, 0)
 	images := make([]image.Image, 0)
 
 	if decodeAll || hasAnimation {
@@ -184,11 +185,13 @@ func decode(r io.Reader, configOnly, decodeAll bool) (*WEBP, image.Config, error
 			}
 
 			delay = append(delay, int(d))
+			disposals = append(disposals, 0)
 		}
 
 		ret := &WEBP{
-			Image: images,
-			Delay: delay,
+			Image:     images,
+			Delay:     delay,
+			Disposals: disposals,
 		}
 
 		return ret, cfg, nil
@@ -356,6 +359,108 @@ func encode(w io.Writer, m image.Image, quality, method int, lossless, exact boo
 	}
 
 	return nil
+}
+
+func encodeBytes(m image.Image, quality, method int, lossless, exact bool) ([]byte, error) {
+	initOnce()
+
+	ctx := context.Background()
+
+	mod, err := rt.InstantiateModule(ctx, cm, mc)
+	if err != nil {
+		return nil, err
+	}
+
+	defer mod.Close(ctx)
+
+	_alloc := mod.ExportedFunction("malloc")
+	_free := mod.ExportedFunction("free")
+	_encode := mod.ExportedFunction("encode")
+
+	var data []byte
+	var colorspace int
+
+	width := m.Bounds().Dx()
+	height := m.Bounds().Dy()
+
+	switch img := m.(type) {
+	case *image.YCbCr:
+		i := imageToNRGBA(img)
+		data = i.Pix
+	case *image.NYCbCrA:
+		if img.SubsampleRatio == image.YCbCrSubsampleRatio420 {
+			length := len(img.Y) + len(img.Cb) + len(img.Cr) + len(img.A)
+			b := struct {
+				addr *uint8
+				len  int
+				cap  int
+			}{&img.Y[0], length, length}
+			data = *(*[]byte)(unsafe.Pointer(&b))
+			colorspace = 4 // WEBP_YUV420A
+		} else {
+			i := imageToNRGBA(img)
+			data = i.Pix
+		}
+	case *image.RGBA:
+		data = img.Pix
+	case *image.NRGBA:
+		data = img.Pix
+	default:
+		i := imageToNRGBA(img)
+		data = i.Pix
+	}
+
+	res, err := _alloc.Call(ctx, uint64(len(data)))
+	if err != nil {
+		return nil, fmt.Errorf("alloc: %w", err)
+	}
+	inPtr := res[0]
+	defer _free.Call(ctx, inPtr)
+
+	ok := mod.Memory().Write(uint32(inPtr), data)
+	if !ok {
+		return nil, ErrMemWrite
+	}
+
+	res, err = _alloc.Call(ctx, 8)
+	if err != nil {
+		return nil, fmt.Errorf("alloc: %w", err)
+	}
+	sizePtr := res[0]
+	defer _free.Call(ctx, sizePtr)
+
+	losslessVal := 0
+	if lossless {
+		losslessVal = 1
+	}
+
+	exactVal := 0
+	if exact {
+		exactVal = 1
+	}
+
+	res, err = _encode.Call(ctx, inPtr, uint64(width), uint64(height), sizePtr, uint64(colorspace), uint64(quality),
+		uint64(method), uint64(losslessVal), uint64(exactVal))
+	if err != nil {
+		return nil, fmt.Errorf("encode: %w", err)
+	}
+	defer _free.Call(ctx, res[0])
+
+	size, ok := mod.Memory().ReadUint64Le(uint32(sizePtr))
+	if !ok {
+		return nil, ErrMemRead
+	}
+
+	if size == 0 {
+		return nil, ErrEncode
+	}
+
+	out, ok := mod.Memory().Read(uint32(res[0]), uint32(size))
+	if !ok {
+		return nil, ErrMemRead
+	}
+
+	return out, nil
 }
 
 var (
