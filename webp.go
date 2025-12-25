@@ -57,10 +57,10 @@ type Options struct {
 	Method int
 	// Exact preserve the exact RGB values in transparent area.
 	Exact bool
+
 	// UseExtendedFormat allows for metadata support. Only used for encoding
 	// animated images.
 	UseExtendedFormat bool
-
 	// Durations times, one per frame, in milliseconds.
 	Durations []int
 	// Disposals methods for frames after display; 0=keep, 1=clear to background.
