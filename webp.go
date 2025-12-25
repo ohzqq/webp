@@ -54,16 +54,9 @@ func Decode(r io.Reader) (image.Image, error) {
 	var err error
 	var ret *WEBP
 
-	if dynamic {
-		ret, _, err = decodeDynamic(r, false, false)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		ret, _, err = decode(r, false, false)
-		if err != nil {
-			return nil, err
-		}
+	ret, _, err = decode(r, false, false)
+	if err != nil {
+		return nil, err
 	}
 
 	return ret.Image[0], nil
@@ -74,16 +67,9 @@ func DecodeConfig(r io.Reader) (image.Config, error) {
 	var err error
 	var cfg image.Config
 
-	if dynamic {
-		_, cfg, err = decodeDynamic(r, true, false)
-		if err != nil {
-			return image.Config{}, err
-		}
-	} else {
-		_, cfg, err = decode(r, true, false)
-		if err != nil {
-			return image.Config{}, err
-		}
+	_, cfg, err = decode(r, true, false)
+	if err != nil {
+		return image.Config{}, err
 	}
 
 	return cfg, nil
@@ -94,16 +80,9 @@ func DecodeAll(r io.Reader) (*WEBP, error) {
 	var err error
 	var ret *WEBP
 
-	if dynamic {
-		ret, _, err = decodeDynamic(r, false, true)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		ret, _, err = decode(r, false, true)
-		if err != nil {
-			return nil, err
-		}
+	ret, _, err = decode(r, false, true)
+	if err != nil {
+		return nil, err
 	}
 
 	return ret, nil
@@ -136,16 +115,9 @@ func Encode(w io.Writer, m image.Image, o ...Options) error {
 		}
 	}
 
-	if dynamic {
-		err := encodeDynamic(w, m, quality, method, lossless, exact)
-		if err != nil {
-			return err
-		}
-	} else {
-		err := encode(w, m, quality, method, lossless, exact)
-		if err != nil {
-			return err
-		}
+	err := encode(w, m, quality, method, lossless, exact)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -153,17 +125,13 @@ func Encode(w io.Writer, m image.Image, o ...Options) error {
 
 // Dynamic returns error (if there was any) during opening dynamic/shared library.
 func Dynamic() error {
-	return dynamicErr
+	return nil
 }
 
 // Init initializes wazero runtime and compiles the module.
 // This function does nothing if a dynamic/shared library is used and Dynamic() returns nil.
 // There is no need to explicitly call this function, first Decode/Encode will initialize the runtime.
 func Init() {
-	if dynamic && dynamicErr == nil {
-		return
-	}
-
 	initOnce()
 }
 

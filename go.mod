@@ -1,8 +1,5 @@
-module github.com/gen2brain/webp
+module github.com/ohzqq/webp
 
-go 1.23
+go 1.24
 
-require (
-	github.com/ebitengine/purego v0.8.3
-	github.com/tetratelabs/wazero v1.9.0
-)
+require github.com/tetratelabs/wazero v1.10.1

@@ -10,20 +10,31 @@ import (
 	"image"
 	"image/color"
 	"io"
+	"math/bits"
 	"os"
 	"runtime"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/api"
+	"github.com/tetratelabs/wazero/experimental"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
 //go:embed lib/webp.wasm.gz
 var webpWasm []byte
 
+func stopClock(what string, t time.Time) {
+	elapsed := time.Since(t)
+	fmt.Printf("%s took %s\n", what, elapsed)
+}
+
 func decode(r io.Reader, configOnly, decodeAll bool) (*WEBP, image.Config, error) {
 	initOnce()
+
+	decodeAll = true // TODO(bep)
 
 	var cfg image.Config
 	var data []byte
@@ -259,8 +270,8 @@ func encode(w io.Writer, m image.Image, quality, method int, lossless, exact boo
 	var data []byte
 	var colorspace int
 
-	var width = m.Bounds().Dx()
-	var height = m.Bounds().Dy()
+	width := m.Bounds().Dx()
+	height := m.Bounds().Dy()
 
 	switch img := m.(type) {
 	case *image.YCbCr:
@@ -269,7 +280,7 @@ func encode(w io.Writer, m image.Image, quality, method int, lossless, exact boo
 	case *image.NYCbCrA:
 		if img.SubsampleRatio == image.YCbCrSubsampleRatio420 {
 			length := len(img.Y) + len(img.Cb) + len(img.Cr) + len(img.A)
-			var b = struct {
+			b := struct {
 				addr *uint8
 				len  int
 				cap  int
@@ -356,8 +367,17 @@ var (
 )
 
 func initialize() {
+	start := time.Now()
+	defer stopClock("init wasm", start)
+	cfg := wazero.NewRuntimeConfig()
+	cfg = cfg.WithCoreFeatures(api.CoreFeaturesV2)
+	if bits.UintSize < 64 {
+		cfg = cfg.WithMemoryLimitPages(512) // 32MB
+	} else {
+		cfg = cfg.WithMemoryLimitPages(4096) // 256MB
+	}
 	ctx := context.Background()
-	rt = wazero.NewRuntime(ctx)
+	rt = wazero.NewRuntimeWithConfig(ctx, cfg)
 
 	r, err := gzip.NewReader(bytes.NewReader(webpWasm))
 	if err != nil {
@@ -371,7 +391,7 @@ func initialize() {
 		panic(err)
 	}
 
-	cm, err = rt.CompileModule(ctx, data.Bytes())
+	cm, err = rt.CompileModule(experimental.WithCompilationWorkers(ctx, runtime.GOMAXPROCS(0)/4), data.Bytes())
 	if err != nil {
 		panic(err)
 	}
