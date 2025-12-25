@@ -27,8 +27,8 @@ const (
 type WEBP struct {
 	// Decoded images.
 	Image []image.Image
-	// Delay times, one per frame, in milliseconds.
-	Delay []int
+	// Durations times, one per frame, in milliseconds.
+	Durations []int
 	// Disposals methods for frames after display; 0=keep, 1=clear to background.
 	Disposals []int
 	// LoopCount the number of times the animation loops; 0 for infinite.
@@ -40,6 +40,12 @@ const DefaultQuality = 75
 
 // DefaultMethod is the default method encoding parameter.
 const DefaultMethod = 4
+
+// DefaultDuration is the default duration for animations.
+const DefaultDuration = 50
+
+// DefaultDisposal is the default duration for animations.
+const DefaultDisposal = 0
 
 // Options are the encoding parameters.
 type Options struct {
@@ -54,6 +60,13 @@ type Options struct {
 	// UseExtendedFormat allows for metadata support. Only used for encoding
 	// animated images.
 	UseExtendedFormat bool
+
+	// Durations times, one per frame, in milliseconds.
+	Durations []int
+	// Disposals methods for frames after display; 0=keep, 1=clear to background.
+	Disposals []int
+	// LoopCount the number of times the animation loops; 0 for infinite.
+	LoopCount int
 }
 
 // Decode reads a WEBP image from r and returns it as an image.Image.
@@ -156,7 +169,7 @@ func EncodeImg(m image.Image, o ...Options) ([]byte, error) {
 		}
 	}
 
-	d, err := encodeBytes(m, quality, method, lossless, exact)
+	d, err := encodeWebpBytes(m, quality, method, lossless, exact)
 	if err != nil {
 		return nil, err
 	}

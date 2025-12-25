@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"embed"
 	_ "embed"
-	"fmt"
 	"image"
 	"image/jpeg"
 	"image/png"
@@ -67,8 +66,8 @@ func TestDecodeAnimWasm(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(ret.Image) != len(ret.Delay) {
-		t.Errorf("got %d, want %d", len(ret.Delay), len(ret.Image))
+	if len(ret.Image) != len(ret.Durations) {
+		t.Errorf("got %d, want %d", len(ret.Durations), len(ret.Image))
 	}
 
 	if len(ret.Image) != 17 {
@@ -111,7 +110,7 @@ func TestImageDecode(t *testing.T) {
 }
 
 func TestImageDecodeAnim(t *testing.T) {
-	img, _, err := image.Decode(bytes.NewReader(testWebpAnim))
+	img, err := Decode(bytes.NewReader(testWebpAnim))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,24 +192,12 @@ func TestImageEncodeAnim(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for i, f := range animWebp.Image {
-		out := fmt.Sprintf("testdata/frame%02d.webp", i)
-		w, err := writeCloser(out)
-		if err != nil {
-			t.Fatal(err)
-		}
-		err = Encode(w, f)
-		if err != nil {
-			t.Error(err)
-		}
-	}
-
 	w, err := writeCloser(`testdata/encoded-anim.webp`)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = encodeAll(w, animWebp)
+	err = EncodeAll(w, animWebp.Image)
 	if err != nil {
 		t.Error(err)
 	}

@@ -190,7 +190,7 @@ func decode(r io.Reader, configOnly, decodeAll bool) (*WEBP, image.Config, error
 
 		ret := &WEBP{
 			Image:     images,
-			Delay:     delay,
+			Durations: delay,
 			Disposals: disposals,
 		}
 
@@ -247,8 +247,8 @@ func decode(r io.Reader, configOnly, decodeAll bool) (*WEBP, image.Config, error
 	images = append(images, img)
 
 	ret := &WEBP{
-		Image: images,
-		Delay: delay,
+		Image:     images,
+		Durations: delay,
 	}
 
 	return ret, cfg, nil
@@ -266,91 +266,9 @@ func encode(w io.Writer, m image.Image, quality, method int, lossless, exact boo
 
 	defer mod.Close(ctx)
 
-	_alloc := mod.ExportedFunction("malloc")
-	_free := mod.ExportedFunction("free")
-	_encode := mod.ExportedFunction("encode")
-
-	var data []byte
-	var colorspace int
-
-	width := m.Bounds().Dx()
-	height := m.Bounds().Dy()
-
-	switch img := m.(type) {
-	case *image.YCbCr:
-		i := imageToNRGBA(img)
-		data = i.Pix
-	case *image.NYCbCrA:
-		if img.SubsampleRatio == image.YCbCrSubsampleRatio420 {
-			length := len(img.Y) + len(img.Cb) + len(img.Cr) + len(img.A)
-			b := struct {
-				addr *uint8
-				len  int
-				cap  int
-			}{&img.Y[0], length, length}
-			data = *(*[]byte)(unsafe.Pointer(&b))
-			colorspace = 4 // WEBP_YUV420A
-		} else {
-			i := imageToNRGBA(img)
-			data = i.Pix
-		}
-	case *image.RGBA:
-		data = img.Pix
-	case *image.NRGBA:
-		data = img.Pix
-	default:
-		i := imageToNRGBA(img)
-		data = i.Pix
-	}
-
-	res, err := _alloc.Call(ctx, uint64(len(data)))
+	out, err := encodeBytes(ctx, mod, m, quality, method, lossless, exact)
 	if err != nil {
-		return fmt.Errorf("alloc: %w", err)
-	}
-	inPtr := res[0]
-	defer _free.Call(ctx, inPtr)
-
-	ok := mod.Memory().Write(uint32(inPtr), data)
-	if !ok {
-		return ErrMemWrite
-	}
-
-	res, err = _alloc.Call(ctx, 8)
-	if err != nil {
-		return fmt.Errorf("alloc: %w", err)
-	}
-	sizePtr := res[0]
-	defer _free.Call(ctx, sizePtr)
-
-	losslessVal := 0
-	if lossless {
-		losslessVal = 1
-	}
-
-	exactVal := 0
-	if exact {
-		exactVal = 1
-	}
-
-	res, err = _encode.Call(ctx, inPtr, uint64(width), uint64(height), sizePtr, uint64(colorspace), uint64(quality),
-		uint64(method), uint64(losslessVal), uint64(exactVal))
-	if err != nil {
-		return fmt.Errorf("encode: %w", err)
-	}
-	defer _free.Call(ctx, res[0])
-
-	size, ok := mod.Memory().ReadUint64Le(uint32(sizePtr))
-	if !ok {
-		return ErrMemRead
-	}
-
-	if size == 0 {
-		return ErrEncode
-	}
-
-	out, ok := mod.Memory().Read(uint32(res[0]), uint32(size))
-	if !ok {
-		return ErrMemRead
+		return err
 	}
 
 	_, err = w.Write(out)
@@ -361,7 +279,7 @@ func encode(w io.Writer, m image.Image, quality, method int, lossless, exact boo
 	return nil
 }
 
-func encodeBytes(m image.Image, quality, method int, lossless, exact bool) ([]byte, error) {
+func encodeWebpBytes(m image.Image, quality, method int, lossless, exact bool) ([]byte, error) {
 	initOnce()
 
 	ctx := context.Background()
@@ -372,7 +290,10 @@ func encodeBytes(m image.Image, quality, method int, lossless, exact bool) ([]by
 	}
 
 	defer mod.Close(ctx)
+	return encodeBytes(ctx, mod, m, quality, method, lossless, exact)
+}
 
+func encodeBytes(ctx context.Context, mod api.Module, m image.Image, quality, method int, lossless, exact bool) ([]byte, error) {
 	_alloc := mod.ExportedFunction("malloc")
 	_free := mod.ExportedFunction("free")
 	_encode := mod.ExportedFunction("encode")

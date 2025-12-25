@@ -10,14 +10,13 @@ import (
 
 // EncodeAll writes the animation to w.
 func EncodeAll(w io.Writer, images []image.Image, o ...Options) error {
-	anim := &nativewebp.Animation{
-		Images:    make([]image.Image, len(images)),
-		Durations: make([]uint, len(images)),
-		Disposals: make([]uint, len(images)),
-		LoopCount: 0,
+	var opt Options
+	if o != nil {
+		opt = o[0]
 	}
+	anim := newAnim(len(images), opt)
 	for i, f := range images {
-		d, err := EncodeImg(f, o...)
+		d, err := EncodeImg(f, opt)
 		if err != nil {
 			return err
 		}
@@ -26,25 +25,26 @@ func EncodeAll(w io.Writer, images []image.Image, o ...Options) error {
 			return err
 		}
 		anim.Images[i] = frame
-		anim.Durations[i] = 80
-		anim.Disposals[i] = 0
 	}
 	return nativewebp.EncodeAll(w, anim, &nativewebp.Options{UseExtendedFormat: true})
 }
 
-// encodeAll writes the animation to w.
-func encodeAll(w io.Writer, webp *WEBP) error {
+func newAnim(total int, o Options) *nativewebp.Animation {
 	anim := &nativewebp.Animation{
-		Images:    webp.Image,
-		Durations: make([]uint, len(webp.Delay)),
-		Disposals: make([]uint, len(webp.Disposals)),
-		LoopCount: uint16(webp.LoopCount),
+		Images:    make([]image.Image, total),
+		Durations: make([]uint, total),
+		Disposals: make([]uint, total),
+		LoopCount: uint16(o.LoopCount),
 	}
-	for i, d := range webp.Delay {
-		anim.Durations[i] = uint(d)
+	for i := 0; i < total; i++ {
+		anim.Durations[i] = uint(DefaultDuration)
+		if i < len(o.Durations) {
+			anim.Durations[i] = uint(o.Durations[i])
+		}
+		anim.Disposals[i] = 0
+		if i < len(o.Disposals) {
+			anim.Disposals[i] = uint(o.Disposals[i])
+		}
 	}
-	for i, d := range webp.Disposals {
-		anim.Durations[i] = uint(d)
-	}
-	return nativewebp.EncodeAll(w, anim, &nativewebp.Options{UseExtendedFormat: true})
+	return anim
 }
